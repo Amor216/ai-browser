@@ -7,7 +7,7 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       outDir: "out/main",
-      rollupOptions: { input: resolve("electron/main.ts") },
+      rollupOptions: { input: resolve("electron/index.ts") },
     },
   },
   preload: {

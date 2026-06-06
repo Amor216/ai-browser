@@ -19,31 +19,31 @@ export function App() {
     });
   }, []);
 
-  function onSubmit(value: string) {
-    const v = value.trim();
-    if (!v) return;
-    if (isLikelyUrl(v)) {
-      window.api.navigate(v);
-      return;
-    }
-    setEvents((prev) => [...prev, { kind: "text_delta", text: `> ${v}\n` }]);
+  function onNavigate(url: string) {
+    if (!url.trim()) return;
+    window.api.navigate(url);
+  }
+
+  function onAsk(prompt: string) {
+    const p = prompt.trim();
+    if (!p || busy) return;
+    setEvents((prev) => [...prev, { kind: "text_delta", text: `\n> ${p}\n` }]);
     setBusy(true);
-    window.api.ask(v);
+    window.api.ask(p);
   }
 
   return (
     <div className="app">
-      <TopBar value={tabUrl} onSubmit={onSubmit} busy={busy} />
+      <TopBar value={tabUrl} onNavigate={onNavigate} />
       <div className="body">
         <div className="tab-slot" />
-        <Sidebar events={events} busy={busy} onCancel={() => window.api.cancel()} />
+        <Sidebar
+          events={events}
+          busy={busy}
+          onAsk={onAsk}
+          onCancel={() => window.api.cancel()}
+        />
       </div>
     </div>
   );
-}
-
-function isLikelyUrl(s: string): boolean {
-  if (/^https?:\/\//.test(s)) return true;
-  if (/\s/.test(s)) return false;
-  return /^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(s);
 }

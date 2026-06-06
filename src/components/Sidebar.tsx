@@ -1,19 +1,28 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentEvent } from "../../shared/ipc.js";
 import { ToolCallChip } from "./ToolCallChip.js";
 
 type Props = {
   events: AgentEvent[];
   busy: boolean;
+  onAsk(prompt: string): void;
   onCancel(): void;
 };
 
-export function Sidebar({ events, busy, onCancel }: Props) {
+export function Sidebar({ events, busy, onAsk, onCancel }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState("");
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [events.length]);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!draft.trim() || busy) return;
+    onAsk(draft);
+    setDraft("");
+  }
 
   return (
     <aside className="sidebar">
@@ -28,6 +37,24 @@ export function Sidebar({ events, busy, onCancel }: Props) {
           events.map((e, i) => <Event key={i} ev={e} />)
         )}
       </div>
+      <form className="sidebar-input" onSubmit={submit}>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              submit(e);
+            }
+          }}
+          placeholder={busy ? "Working..." : "Ask the agent about this page..."}
+          rows={2}
+          disabled={busy}
+        />
+        <button type="submit" disabled={busy || !draft.trim()}>
+          Send
+        </button>
+      </form>
     </aside>
   );
 }
@@ -55,9 +82,12 @@ function Event({ ev }: { ev: AgentEvent }) {
 function Hint() {
   return (
     <div className="hint">
-      Try: "summarize this page", "open hackernews", "click the first headline".
-      <br />
-      Or paste a URL to navigate.
+      Type below to ask the agent about the current page.
+      <br /><br />
+      Examples:
+      <br />- "Summarize this page in 3 bullets"
+      <br />- "What are the top 3 stories?"
+      <br />- "Click the first link"
     </div>
   );
 }

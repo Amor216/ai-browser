@@ -160,3 +160,51 @@ html, body, #root, .app {
   font-size: 13px;
   padding: 8px;
 }
+
+.sidebar-input {
+  border-top: 1px solid #2a2a2a;
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  background: #131313;
+}
+
+.sidebar-input textarea {
+  flex: 1;
+  resize: none;
+  padding: 8px 10px;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  background: #1c1c1c;
+  color: #e8e8e8;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.sidebar-input textarea:focus {
+  border-color: #4a90e2;
+}
+
+.sidebar-input textarea:disabled {
+  opacity: 0.6;
+}
+
+.sidebar-input button {
+  height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 8px;
+  background: #4a90e2;
+  color: white;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.sidebar-input button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

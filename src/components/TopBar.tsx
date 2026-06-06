@@ -2,11 +2,10 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = {
   value: string;
-  busy: boolean;
-  onSubmit(value: string): void;
+  onNavigate(url: string): void;
 };
 
-export function TopBar({ value, busy, onSubmit }: Props) {
+export function TopBar({ value, onNavigate }: Props) {
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLInputElement>(null);
 
@@ -16,7 +15,7 @@ export function TopBar({ value, busy, onSubmit }: Props) {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    onSubmit(draft);
+    onNavigate(draft);
     if (ref.current) ref.current.blur();
   }
 
@@ -26,13 +25,11 @@ export function TopBar({ value, busy, onSubmit }: Props) {
         ref={ref}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        placeholder="Type a URL or ask anything about the current page..."
+        placeholder="Enter URL..."
         spellCheck={false}
         autoComplete="off"
       />
-      <button type="submit" disabled={busy}>
-        {busy ? "..." : "Go"}
-      </button>
+      <button type="submit">Go</button>
     </form>
   );
 }

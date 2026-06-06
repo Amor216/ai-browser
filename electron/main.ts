@@ -1,6 +1,10 @@
 import { app, BrowserView, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { config as loadDotenv } from "dotenv";
+import { AgentSession } from "./agent.js";
+
+loadDotenv();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -10,6 +14,7 @@ const START_URL = "https://news.ycombinator.com";
 
 let win: BrowserWindow | null = null;
 let view: BrowserView | null = null;
+const agent = new AgentSession();
 
 function createWindow() {
   win = new BrowserWindow({
@@ -70,15 +75,12 @@ ipcMain.handle("nav:goto", async (_, url: string) => {
 });
 
 ipcMain.handle("agent:ask", async (_, prompt: string) => {
-  // wired up in the next milestone
-  win?.webContents.send("agent:event", {
-    kind: "error",
-    message: `agent not yet implemented (prompt: ${prompt.slice(0, 80)})`,
-  });
+  if (!view || !win) return;
+  await agent.run(prompt, view, (event) => win?.webContents.send("agent:event", event));
 });
 
 ipcMain.handle("agent:cancel", async () => {
-  // wired up in the next milestone
+  agent.cancel();
 });
 
 function normalizeUrl(raw: string): string {

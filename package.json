@@ -1,5 +1,5 @@
 {
-  "name": "comet-clone",
+  "name": "ai-browser",
   "version": "0.1.0",
   "description": "AI-augmented desktop browser with a side-panel agent that reads, navigates, and acts on the current tab",
   "main": "out/main/index.js",

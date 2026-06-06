@@ -20,7 +20,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1400,
     height: 900,
-    title: "comet-clone",
+    title: "ai-browser",
     backgroundColor: "#111",
     webPreferences: {
       preload: join(__dirname, "../preload/preload.mjs"),

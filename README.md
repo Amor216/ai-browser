@@ -1,4 +1,4 @@
-# comet-clone
+# ai-browser
 
 A small desktop browser with an AI side panel. The panel agent reads the current Chromium tab, navigates, clicks, types into forms, and takes screenshots through Anthropic SDK tool-use. Single window, split layout: tab on the left, conversation on the right.
 

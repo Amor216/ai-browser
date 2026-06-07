@@ -103,6 +103,8 @@ shared/
 | Ctrl+W | Close tab |
 | Ctrl+L | Focus omnibox |
 | Ctrl+R | Reload |
+| Ctrl+F | Find in page |
+| Ctrl+Shift+I / F12 | Toggle DevTools |
 | Ctrl+Tab / Ctrl+Shift+Tab | Cycle tabs |
 | Middle-click on tab | Close tab |
 

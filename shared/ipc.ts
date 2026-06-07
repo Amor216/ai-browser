@@ -102,6 +102,11 @@ export type ApiSurface = {
   ask(prompt: string): Promise<void>;
   cancel(): Promise<void>;
   onAgentEvent(handler: (e: AgentEvent) => void): () => void;
+
+  devToolsToggle(): Promise<void>;
+  findStart(query: string, forward: boolean): Promise<void>;
+  findNext(forward: boolean): Promise<void>;
+  findStop(): Promise<void>;
 };
 
 declare global {

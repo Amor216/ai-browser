@@ -54,6 +54,11 @@ const api: ApiSurface = {
   ask: (prompt) => ipcRenderer.invoke("agent:ask", prompt),
   cancel: () => ipcRenderer.invoke("agent:cancel"),
   onAgentEvent: (h) => on<AgentEvent>("agent:event", h),
+
+  devToolsToggle: () => ipcRenderer.invoke("devtools:toggle"),
+  findStart: (query, forward) => ipcRenderer.invoke("find:start", query, forward),
+  findNext: (forward) => ipcRenderer.invoke("find:next", forward),
+  findStop: () => ipcRenderer.invoke("find:stop"),
 };
 
 contextBridge.exposeInMainWorld("api", api);

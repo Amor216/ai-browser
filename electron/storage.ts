@@ -3,6 +3,14 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Bookmark, HistoryEntry, Settings } from "../shared/ipc.js";
 
+export type WindowBounds = {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  maximized: boolean;
+};
+
 const DEFAULTS: Settings = {
   theme: "dark",
   showBookmarkBar: true,
@@ -41,16 +49,20 @@ class JsonStore<T> {
   }
 }
 
+const DEFAULT_BOUNDS: WindowBounds = { width: 1400, height: 900, maximized: false };
+
 export class Storage {
   private settings: JsonStore<Settings>;
   private bookmarks: JsonStore<Bookmark[]>;
   private history: JsonStore<HistoryEntry[]>;
+  private window: JsonStore<WindowBounds>;
 
   constructor() {
     const dir = app.getPath("userData");
     this.settings = new JsonStore(join(dir, "settings.json"), DEFAULTS);
     this.bookmarks = new JsonStore(join(dir, "bookmarks.json"), []);
     this.history = new JsonStore(join(dir, "history.json"), []);
+    this.window = new JsonStore(join(dir, "window.json"), DEFAULT_BOUNDS);
   }
 
   async init(): Promise<void> {
@@ -58,6 +70,15 @@ export class Storage {
     await this.settings.load();
     await this.bookmarks.load();
     await this.history.load();
+    await this.window.load();
+  }
+
+  async getWindowBounds(): Promise<WindowBounds> {
+    return { ...DEFAULT_BOUNDS, ...(await this.window.load()) };
+  }
+
+  async saveWindowBounds(bounds: WindowBounds): Promise<void> {
+    await this.window.save(bounds);
   }
 
   async getSettings(): Promise<Settings> {

@@ -9,6 +9,7 @@ import type {
 } from "../shared/ipc.js";
 import { BookmarkBar } from "./components/BookmarkBar.js";
 import { BookmarksPage } from "./components/BookmarksPage.js";
+import { FindBar } from "./components/FindBar.js";
 import { HistoryPage } from "./components/HistoryPage.js";
 import { MenuDropdown, type MenuAction } from "./components/MenuDropdown.js";
 import { NavBar } from "./components/NavBar.js";
@@ -26,6 +27,7 @@ export function App() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [busy, setBusy] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
 
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -100,11 +102,22 @@ export function App() {
       } else if (mod && e.key === "Tab") {
         e.preventDefault();
         cycleTab(tabs, e.shiftKey ? -1 : 1);
+      } else if (mod && e.key === "f") {
+        e.preventDefault();
+        setFindOpen(true);
+      } else if (mod && e.shiftKey && (e.key === "I" || e.key === "i")) {
+        e.preventDefault();
+        void window.api.devToolsToggle();
+      } else if (e.key === "F12") {
+        e.preventDefault();
+        void window.api.devToolsToggle();
+      } else if (e.key === "Escape" && findOpen) {
+        setFindOpen(false);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeTab, tabs]);
+  }, [activeTab, tabs, findOpen]);
 
   function onNavigate(value: string) {
     if (!value.trim()) return;
@@ -168,6 +181,7 @@ export function App() {
         onOpenMenu={(rect) => setMenuAnchor(rect)}
       />
       {showBookmarkBar ? <BookmarkBar bookmarks={bookmarks} /> : null}
+      {findOpen ? <FindBar onClose={() => setFindOpen(false)} /> : null}
       <div className="body">
         <div className="content" ref={contentRef}>
           {activeTab?.kind === "newtab" ? <NewTabPage onNavigate={onNavigate} /> : null}

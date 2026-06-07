@@ -25,10 +25,13 @@ const agent = new AgentSession();
 async function createWindow(): Promise<void> {
   await storage.init();
   const settings = await storage.getSettings();
+  const bounds = await storage.getWindowBounds();
 
   win = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    width: bounds.width,
+    height: bounds.height,
+    x: bounds.x,
+    y: bounds.y,
     minWidth: 800,
     minHeight: 500,
     title: "ai-browser",
@@ -42,6 +45,7 @@ async function createWindow(): Promise<void> {
       sandbox: false,
     },
   });
+  if (bounds.maximized) win.maximize();
 
   tabs = new TabManager(win, storage, (s) => sendTabsState(s));
 
@@ -49,6 +53,22 @@ async function createWindow(): Promise<void> {
   win.on("unmaximize", emitWindowState);
   win.on("enter-full-screen", emitWindowState);
   win.on("leave-full-screen", emitWindowState);
+
+  let saveTimer: NodeJS.Timeout | null = null;
+  const persistBounds = () => {
+    if (!win) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (!win) return;
+      const [width, height] = win.getSize();
+      const [x, y] = win.getPosition();
+      void storage.saveWindowBounds({ width, height, x, y, maximized: win.isMaximized() });
+    }, 400);
+  };
+  win.on("resize", persistBounds);
+  win.on("move", persistBounds);
+  win.on("maximize", persistBounds);
+  win.on("unmaximize", persistBounds);
 
   const devUrl = process.env.ELECTRON_RENDERER_URL;
   if (devUrl) await win.loadURL(devUrl);
@@ -147,6 +167,31 @@ ipcMain.handle("agent:ask", async (_, prompt: string) => {
   );
 });
 ipcMain.handle("agent:cancel", () => agent.cancel());
+
+ipcMain.handle("devtools:toggle", () => {
+  const wc = tabs?.activeWebContents();
+  if (!wc) return;
+  if (wc.isDevToolsOpened()) wc.closeDevTools();
+  else wc.openDevTools({ mode: "right" });
+});
+
+ipcMain.handle("find:start", (_, query: string, forward: boolean) => {
+  const wc = tabs?.activeWebContents();
+  if (!wc || !query) return;
+  wc.findInPage(query, { forward, findNext: false });
+});
+
+ipcMain.handle("find:next", (_, forward: boolean) => {
+  const wc = tabs?.activeWebContents();
+  if (!wc) return;
+  wc.findInPage("", { forward, findNext: true });
+});
+
+ipcMain.handle("find:stop", () => {
+  const wc = tabs?.activeWebContents();
+  if (!wc) return;
+  wc.stopFindInPage("clearSelection");
+});
 
 function normalizeUrl(raw: string, settings: Settings): string {
   const trimmed = raw.trim();

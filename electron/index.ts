@@ -74,11 +74,25 @@ async function createWindow(): Promise<void> {
   if (devUrl) await win.loadURL(devUrl);
   else await win.loadFile(join(__dirname, "../renderer/index.html"));
 
-  tabs.create({ kind: settings.homepage === "about:newtab" ? "newtab" : "web", url: settings.homepage });
+  const saved = await storage.getSession();
+  if (saved.tabs.length > 0) {
+    for (const t of saved.tabs) tabs.create({ url: t.url, kind: "web", activate: false });
+    const list = tabs.state().tabs;
+    const target = list[Math.min(saved.activeIndex, list.length - 1)];
+    if (target) tabs.activate(target.id);
+  } else {
+    tabs.create({ kind: settings.homepage === "about:newtab" ? "newtab" : "web", url: settings.homepage });
+  }
+}
+
+function persistSession(): void {
+  if (!tabs) return;
+  void storage.saveSession(tabs.snapshot());
 }
 
 function sendTabsState(s: TabsState): void {
   win?.webContents.send("tabs:state", s);
+  persistSession();
 }
 
 function emitWindowState(): void {
@@ -215,6 +229,8 @@ function searchUrl(query: string, engine: Settings["searchEngine"]): string {
 }
 
 app.whenReady().then(createWindow);
+
+app.on("before-quit", () => persistSession());
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

@@ -33,6 +33,17 @@ export class TabManager {
     return active?.view?.webContents ?? null;
   }
 
+  snapshot(): { tabs: { url: string; title: string }[]; activeIndex: number } {
+    const tabs = this.tabs
+      .filter((t) => t.kind === "web" && t.url && !t.url.startsWith("about:"))
+      .map((t) => ({ url: t.url, title: t.title }));
+    const activeId = this.activeId;
+    const activeIndex = activeId
+      ? Math.max(0, this.tabs.filter((t) => t.kind === "web").findIndex((t) => t.id === activeId))
+      : 0;
+    return { tabs, activeIndex };
+  }
+
   setBounds(bounds: ContentBounds): void {
     this.bounds = bounds;
     this.applyBoundsToActive();

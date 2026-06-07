@@ -1,12 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { BrowserView } from "electron";
+import type { WebContents } from "electron";
 import type { AgentEvent } from "../shared/ipc.js";
 import { costUsd } from "./pricing.js";
 import { runTool, TOOL_DEFS } from "./tools.js";
 
-const MODEL = process.env.COMET_MODEL || "claude-sonnet-4-5";
 const MAX_TOKENS = 1536;
-const MAX_STEPS = 12;
+
+type AgentConfig = {
+  model: string;
+  maxSteps: number;
+};
 
 const SYSTEM = `You are a browser-resident assistant in a desktop app. The user sees a real Chromium tab on the left; you can read it and act on it through tools.
 
@@ -24,11 +27,15 @@ export class AgentSession {
   private cancelled = false;
   private history: Anthropic.MessageParam[] = [];
 
-  cancel() {
+  cancel(): void {
     this.cancelled = true;
   }
 
-  async run(prompt: string, view: BrowserView, emit: Emit): Promise<void> {
+  resetHistory(): void {
+    this.history = [];
+  }
+
+  async run(prompt: string, wc: WebContents, config: AgentConfig, emit: Emit): Promise<void> {
     this.cancelled = false;
     this.history.push({ role: "user", content: prompt });
 
@@ -37,7 +44,7 @@ export class AgentSession {
     let toolCalls = 0;
 
     try {
-      for (let step = 0; step < MAX_STEPS; step++) {
+      for (let step = 0; step < config.maxSteps; step++) {
         if (this.cancelled) {
           emit({ kind: "error", message: "cancelled" });
           return;
@@ -46,7 +53,7 @@ export class AgentSession {
         let final: Anthropic.Message | undefined;
         await this.client.messages
           .stream({
-            model: MODEL,
+            model: config.model,
             max_tokens: MAX_TOKENS,
             system: SYSTEM,
             tools: TOOL_DEFS as unknown as Anthropic.Tool[],
@@ -70,7 +77,7 @@ export class AgentSession {
             usage: {
               in: totalIn,
               out: totalOut,
-              cost: costUsd(MODEL, totalIn, totalOut),
+              cost: costUsd(config.model, totalIn, totalOut),
               toolCalls,
             },
           });
@@ -86,7 +93,7 @@ export class AgentSession {
             name: block.name,
             args: block.input as Record<string, unknown>,
           });
-          const result = await safeRunTool(view, block.name, block.input as Record<string, unknown>);
+          const result = await safeRunTool(wc, block.name, block.input as Record<string, unknown>);
           emit({
             kind: "tool_result",
             name: block.name,
@@ -97,7 +104,7 @@ export class AgentSession {
         }
         this.history.push({ role: "user", content: toolResults });
       }
-      emit({ kind: "error", message: `tool loop exceeded ${MAX_STEPS} steps` });
+      emit({ kind: "error", message: `tool loop exceeded ${config.maxSteps} steps` });
     } catch (e) {
       emit({ kind: "error", message: e instanceof Error ? e.message : String(e) });
     }
@@ -107,12 +114,12 @@ export class AgentSession {
 type ToolOutcome = { value: { text?: string; image?: string }; error?: string };
 
 async function safeRunTool(
-  view: BrowserView,
+  wc: WebContents,
   name: string,
   args: Record<string, unknown>,
 ): Promise<ToolOutcome> {
   try {
-    const out = await runTool(view, name, args);
+    const out = await runTool(wc, name, args);
     return { value: out };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

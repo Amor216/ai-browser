@@ -1,4 +1,4 @@
-import type { BrowserView } from "electron";
+import type { WebContents } from "electron";
 
 const MAX_TEXT = 30_000;
 
@@ -62,23 +62,23 @@ export const TOOL_DEFS = [
 export type ToolResult = { text: string } | { image: string };
 
 export async function runTool(
-  view: BrowserView,
+  wc: WebContents,
   name: string,
   args: Record<string, unknown>,
 ): Promise<ToolResult> {
   switch (name) {
     case "get_page":
-      return { text: await getPage(view) };
+      return { text: await getPage(wc) };
     case "navigate":
-      return { text: await navigate(view, String(args.url)) };
+      return { text: await navigate(wc, String(args.url)) };
     case "click":
-      return { text: await click(view, String(args.selector)) };
+      return { text: await click(wc, String(args.selector)) };
     case "type_into":
       return {
-        text: await typeInto(view, String(args.selector), String(args.text), Boolean(args.submit)),
+        text: await typeInto(wc, String(args.selector), String(args.text), Boolean(args.submit)),
       };
     case "screenshot":
-      return { image: await screenshot(view) };
+      return { image: await screenshot(wc) };
     case "wait":
       await sleep(Number(args.ms) || 500);
       return { text: `slept ${args.ms}ms` };
@@ -87,8 +87,7 @@ export async function runTool(
   }
 }
 
-async function getPage(view: BrowserView): Promise<string> {
-  const wc = view.webContents;
+async function getPage(wc: WebContents): Promise<string> {
   const url = wc.getURL();
   const title = wc.getTitle();
   const text = await wc.executeJavaScript(
@@ -98,15 +97,15 @@ async function getPage(view: BrowserView): Promise<string> {
   return `URL: ${url}\nTitle: ${title}\n\n${text}`;
 }
 
-async function navigate(view: BrowserView, url: string): Promise<string> {
+async function navigate(wc: WebContents, url: string): Promise<string> {
   const final = /^https?:\/\//.test(url) ? url : `https://${url}`;
-  await view.webContents.loadURL(final);
-  return `loaded ${view.webContents.getURL()}`;
+  await wc.loadURL(final);
+  return `loaded ${wc.getURL()}`;
 }
 
-async function click(view: BrowserView, selector: string): Promise<string> {
+async function click(wc: WebContents, selector: string): Promise<string> {
   const escaped = JSON.stringify(selector);
-  const ok = await view.webContents.executeJavaScript(
+  const ok = await wc.executeJavaScript(
     `(() => { const el = document.querySelector(${escaped}); if (!el) return false; el.click(); return true; })()`,
     true,
   );
@@ -115,7 +114,7 @@ async function click(view: BrowserView, selector: string): Promise<string> {
 }
 
 async function typeInto(
-  view: BrowserView,
+  wc: WebContents,
   selector: string,
   text: string,
   submit: boolean,
@@ -135,10 +134,10 @@ async function typeInto(
     }
     return true;
   })()`;
-  const ok = await view.webContents.executeJavaScript(js, true);
+  const ok = await wc.executeJavaScript(js, true);
   if (!ok) throw new Error(`selector not found: ${selector}`);
   if (submit) {
-    await view.webContents.executeJavaScript(
+    await wc.executeJavaScript(
       `(() => { const el = document.querySelector(${sel}); if (!el) return; const form = el.closest("form"); if (form) form.submit(); else el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); })()`,
       true,
     );
@@ -146,8 +145,8 @@ async function typeInto(
   return `typed into ${selector}${submit ? " + submit" : ""}`;
 }
 
-async function screenshot(view: BrowserView): Promise<string> {
-  const image = await view.webContents.capturePage();
+async function screenshot(wc: WebContents): Promise<string> {
+  const image = await wc.capturePage();
   return image.toPNG().toString("base64");
 }
 

@@ -1,27 +1,41 @@
-import { app, BrowserView, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { config as loadDotenv } from "dotenv";
 import { AgentSession } from "./agent.js";
+import { TabManager } from "./tabs.js";
+import { Storage } from "./storage.js";
+import type {
+  ContentBounds,
+  Settings,
+  TabKind,
+  TabsState,
+  WindowState,
+} from "../shared/ipc.js";
 
 loadDotenv();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const SIDEBAR_WIDTH = 380;
-const TOPBAR_HEIGHT = 56;
-const START_URL = "https://news.ycombinator.com";
-
 let win: BrowserWindow | null = null;
-let view: BrowserView | null = null;
+let tabs: TabManager | null = null;
+const storage = new Storage();
 const agent = new AgentSession();
 
-function createWindow() {
+async function createWindow(): Promise<void> {
+  await storage.init();
+  const settings = await storage.getSettings();
+
   win = new BrowserWindow({
     width: 1400,
     height: 900,
+    minWidth: 800,
+    minHeight: 500,
     title: "ai-browser",
-    backgroundColor: "#111",
+    backgroundColor: "#202124",
+    frame: process.platform === "darwin",
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
+    trafficLightPosition: process.platform === "darwin" ? { x: 12, y: 12 } : undefined,
     webPreferences: {
       preload: join(__dirname, "../preload/preload.mjs"),
       contextIsolation: true,
@@ -29,65 +43,130 @@ function createWindow() {
     },
   });
 
-  view = new BrowserView({
-    webPreferences: {
-      contextIsolation: true,
-      sandbox: true,
-      partition: "persist:tab",
-    },
-  });
-  win.setBrowserView(view);
-  layoutView();
-  view.webContents.loadURL(START_URL);
+  tabs = new TabManager(win, storage, (s) => sendTabsState(s));
 
-  view.webContents.on("did-navigate", (_, url) => {
-    win?.webContents.send("tab:url", url);
-  });
-  view.webContents.on("did-navigate-in-page", (_, url) => {
-    win?.webContents.send("tab:url", url);
-  });
-
-  win.on("resize", layoutView);
+  win.on("maximize", emitWindowState);
+  win.on("unmaximize", emitWindowState);
+  win.on("enter-full-screen", emitWindowState);
+  win.on("leave-full-screen", emitWindowState);
 
   const devUrl = process.env.ELECTRON_RENDERER_URL;
-  if (devUrl) {
-    win.loadURL(devUrl);
-  } else {
-    win.loadFile(join(__dirname, "../renderer/index.html"));
-  }
+  if (devUrl) await win.loadURL(devUrl);
+  else await win.loadFile(join(__dirname, "../renderer/index.html"));
+
+  tabs.create({ kind: settings.homepage === "about:newtab" ? "newtab" : "web", url: settings.homepage });
 }
 
-function layoutView() {
-  if (!win || !view) return;
-  const [w, h] = win.getContentSize();
-  view.setBounds({
-    x: 0,
-    y: TOPBAR_HEIGHT,
-    width: Math.max(0, w - SIDEBAR_WIDTH),
-    height: Math.max(0, h - TOPBAR_HEIGHT),
-  });
-  view.setAutoResize({ width: false, height: true, horizontal: false, vertical: false });
+function sendTabsState(s: TabsState): void {
+  win?.webContents.send("tabs:state", s);
 }
 
-ipcMain.handle("nav:goto", async (_, url: string) => {
-  if (!view) return;
-  await view.webContents.loadURL(normalizeUrl(url));
+function emitWindowState(): void {
+  if (!win) return;
+  const s: WindowState = {
+    maximized: win.isMaximized(),
+    fullscreen: win.isFullScreen(),
+    platform: process.platform,
+  };
+  win.webContents.send("window:state", s);
+}
+
+function emitBookmarks(): void {
+  void storage.listBookmarks().then((b) => win?.webContents.send("bookmarks:list", b));
+}
+
+function emitSettings(s: Settings): void {
+  win?.webContents.send("settings:state", s);
+}
+
+ipcMain.handle("tab:new", async (_, opts?: { url?: string; kind?: TabKind; activate?: boolean }) => {
+  return tabs?.create(opts ?? {});
 });
+ipcMain.handle("tab:close", async (_, id: string) => tabs?.close(id));
+ipcMain.handle("tab:activate", async (_, id: string) => tabs?.activate(id));
+ipcMain.handle("tab:reorder", async (_, fromId: string, toId: string) => tabs?.reorder(fromId, toId));
+ipcMain.handle("tab:setInternal", async (_, id: string, kind: TabKind) => tabs?.setInternal(id, kind));
+
+ipcMain.handle("nav:goto", async (_, url: string, tabId?: string) => {
+  await tabs?.navigate(normalizeUrl(url, await storage.getSettings()), tabId);
+});
+ipcMain.handle("nav:back", async (_, tabId?: string) => tabs?.goBack(tabId));
+ipcMain.handle("nav:forward", async (_, tabId?: string) => tabs?.goForward(tabId));
+ipcMain.handle("nav:reload", async (_, tabId?: string) => tabs?.reload(tabId));
+ipcMain.handle("nav:stop", async (_, tabId?: string) => tabs?.stop(tabId));
+
+ipcMain.handle("bookmarks:list", () => storage.listBookmarks());
+ipcMain.handle("bookmarks:add", async (_, url: string, title: string) => {
+  await storage.addBookmark(url, title);
+  emitBookmarks();
+});
+ipcMain.handle("bookmarks:remove", async (_, id: string) => {
+  await storage.removeBookmark(id);
+  emitBookmarks();
+});
+
+ipcMain.handle("history:list", (_, limit?: number) => storage.listHistory(limit));
+ipcMain.handle("history:mostVisited", (_, limit: number) => storage.mostVisited(limit));
+ipcMain.handle("history:clear", () => storage.clearHistory());
+ipcMain.handle("history:remove", (_, url: string) => storage.removeHistory(url));
+
+ipcMain.handle("settings:get", () => storage.getSettings());
+ipcMain.handle("settings:set", async (_, patch: Partial<Settings>) => {
+  const next = await storage.patchSettings(patch);
+  emitSettings(next);
+  return next;
+});
+
+ipcMain.handle("window:minimize", () => win?.minimize());
+ipcMain.handle("window:maxToggle", () => {
+  if (!win) return;
+  if (win.isMaximized()) win.unmaximize();
+  else win.maximize();
+});
+ipcMain.handle("window:close", () => win?.close());
+ipcMain.handle("window:getState", () => {
+  if (!win) return null;
+  return {
+    maximized: win.isMaximized(),
+    fullscreen: win.isFullScreen(),
+    platform: process.platform,
+  };
+});
+
+ipcMain.handle("layout:setBounds", (_, bounds: ContentBounds) => tabs?.setBounds(bounds));
 
 ipcMain.handle("agent:ask", async (_, prompt: string) => {
-  if (!view || !win) return;
-  await agent.run(prompt, view, (event) => win?.webContents.send("agent:event", event));
+  const wc = tabs?.activeWebContents();
+  if (!wc || !win) return;
+  const settings = await storage.getSettings();
+  await agent.run(
+    prompt,
+    wc,
+    { model: settings.agentModel, maxSteps: settings.agentMaxSteps },
+    (event) => win?.webContents.send("agent:event", event),
+  );
 });
+ipcMain.handle("agent:cancel", () => agent.cancel());
 
-ipcMain.handle("agent:cancel", async () => {
-  agent.cancel();
-});
-
-function normalizeUrl(raw: string): string {
+function normalizeUrl(raw: string, settings: Settings): string {
   const trimmed = raw.trim();
+  if (trimmed.startsWith("about:") || trimmed.startsWith("file://")) return trimmed;
   if (/^https?:\/\//.test(trimmed)) return trimmed;
-  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(trimmed)) return `https://${trimmed}`;
-  return `https://duckduckgo.com/?q=${encodeURIComponent(trimmed)}`;
+  if (/^[a-z0-9-]+(\.[a-z0-9-]+)+(\/.*)?$/i.test(trimmed)) return `https://${trimmed}`;
+  return searchUrl(trimmed, settings.searchEngine);
+}
+
+function searchUrl(query: string, engine: Settings["searchEngine"]): string {
+  const q = encodeURIComponent(query);
+  switch (engine) {
+    case "google":
+      return `https://www.google.com/search?q=${q}`;
+    case "bing":
+      return `https://www.bing.com/search?q=${q}`;
+    case "duckduckgo":
+    default:
+      return `https://duckduckgo.com/?q=${q}`;
+  }
 }
 
 app.whenReady().then(createWindow);

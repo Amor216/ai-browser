@@ -27,8 +27,8 @@ export function Sidebar({ events, busy, onAsk, onCancel }: Props) {
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <span>Assistant</span>
-        {busy ? <button onClick={onCancel}>cancel</button> : null}
+        <span>AI Assistant</span>
+        {busy ? <button onClick={onCancel}>Cancel</button> : null}
       </div>
       <div className="sidebar-body" ref={scrollRef}>
         {events.length === 0 ? (
